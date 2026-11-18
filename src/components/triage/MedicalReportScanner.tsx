@@ -234,7 +234,7 @@ export function MedicalReportScanner({
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/png,image/jpeg,image/webp"
+                accept="image/png,image/jpeg,image/webp,application/pdf"
                 onChange={handleFileChange}
                 className="hidden"
               />
@@ -243,10 +243,10 @@ export function MedicalReportScanner({
               </div>
               <div className="space-y-0.5">
                 <p className="text-xs sm:text-sm font-bold text-slate-800">
-                  {isUrdu ? "لیب رپورٹ تصویر منتخب کریں" : "Upload Lab Report Photo"}
+                  {isUrdu ? "لیب رپورٹ تصویر یا PDF منتخب کریں" : "Upload Lab Report Image or PDF"}
                 </p>
                 <p className="text-[11px] text-slate-500">
-                  PNG, JPG, WEBP • {isUrdu ? "مقامی OCR" : "Local Tesseract OCR"}
+                  PNG, JPG, WEBP, PDF • {isUrdu ? "مقامی OCR" : "Fast Local Server OCR"}
                 </p>
               </div>
               <button
