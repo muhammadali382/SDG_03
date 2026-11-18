@@ -131,6 +131,7 @@ export function MedicalReportScanner({
       const res = await fetch("/api/report-analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           reportText: extractedText.trim(),
           userId: user?.id,

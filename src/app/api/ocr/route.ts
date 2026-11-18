@@ -5,8 +5,14 @@ import os from "os";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { createWorker, type Worker } from "tesseract.js";
+import { checkRateLimit, getClientIp } from "@/lib/rate_limit";
 
 const execFileAsync = promisify(execFile);
+
+const NO_STORE_HEADERS = { "Cache-Control": "no-store" };
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 MB cap
+const ALLOWED_MIME_PREFIXES = ["image/png", "image/jpeg", "image/jpg", "image/webp", "image/bmp", "image/gif", "application/pdf"];
+const ALLOWED_EXTS = [".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".pdf"];
 
 const ALLOWED_SAMPLES: Record<string, string> = {
   "/demo-lab-report.png": "public/demo-lab-report.png",
@@ -83,6 +89,21 @@ async function extractPdfText(pdfBuf: Buffer): Promise<string> {
 
 export async function POST(req: NextRequest) {
   try {
+    const ip = getClientIp(req);
+    const rate = checkRateLimit(`ocr:${ip}`, 15, 5 * 60 * 1000);
+    if (!rate.allowed) {
+      return NextResponse.json(
+        { error: "Too many document scan requests. Please wait a moment and try again." },
+        {
+          status: 429,
+          headers: {
+            ...NO_STORE_HEADERS,
+            "Retry-After": String(rate.retryAfterSeconds),
+          },
+        }
+      );
+    }
+
     const formData = await req.formData();
     const fileInput = formData.get("file");
     const samplePath = formData.get("samplePath");
@@ -95,27 +116,61 @@ export async function POST(req: NextRequest) {
       buffer = await fs.readFile(fullPath);
     } else if (fileInput && fileInput instanceof Blob) {
       if (fileInput.size === 0) {
-        return NextResponse.json({ error: "Uploaded file is empty" }, { status: 400 });
+        return NextResponse.json(
+          { error: "Uploaded file is empty" },
+          { status: 400, headers: NO_STORE_HEADERS }
+        );
+      }
+      if (fileInput.size > MAX_UPLOAD_BYTES) {
+        return NextResponse.json(
+          { error: "Uploaded file exceeds the 10 MB size limit." },
+          { status: 413, headers: NO_STORE_HEADERS }
+        );
       }
       const mime = (fileInput.type || "").toLowerCase();
       const name = "name" in fileInput && typeof fileInput.name === "string" ? fileInput.name.toLowerCase() : "";
+      const hasValidMime = mime ? ALLOWED_MIME_PREFIXES.some((m) => mime.includes(m)) : false;
+      const hasValidExt = name ? ALLOWED_EXTS.some((ext) => name.endsWith(ext)) : false;
+      if (!hasValidMime && !hasValidExt) {
+        return NextResponse.json(
+          { error: "Unsupported file format. Please upload PNG, JPG, WEBP, or PDF." },
+          { status: 415, headers: NO_STORE_HEADERS }
+        );
+      }
       isPdf = mime.includes("pdf") || name.endsWith(".pdf");
       buffer = Buffer.from(await fileInput.arrayBuffer());
     } else {
       return NextResponse.json(
         { error: "Please upload an image (PNG, JPG, WEBP) or PDF medical report" },
-        { status: 400 }
+        { status: 400, headers: NO_STORE_HEADERS }
       );
     }
 
     if (isPdf) {
-      const text = await extractPdfText(buffer);
-      return NextResponse.json({
-        success: true,
-        text,
-        confidence: text ? 99 : 0,
-        engine: "pdftotext",
-      });
+      try {
+        const text = await extractPdfText(buffer);
+        return NextResponse.json(
+          {
+            success: true,
+            text,
+            confidence: text ? 99 : 0,
+            engine: "pdftotext",
+          },
+          { headers: NO_STORE_HEADERS }
+        );
+      } catch (pdfErr: unknown) {
+        const errCode = (pdfErr as NodeJS.ErrnoException)?.code;
+        if (errCode === "ENOENT") {
+          return NextResponse.json(
+            {
+              error:
+                "PDF text extraction is unavailable in this server environment. Please upload a PNG or JPG screenshot of your report instead.",
+            },
+            { status: 422, headers: NO_STORE_HEADERS }
+          );
+        }
+        throw pdfErr;
+      }
     }
 
     const processedBuffer = await preprocessImageBuffer(buffer);
@@ -125,16 +180,22 @@ export async function POST(req: NextRequest) {
     const text = (result.data.text || "").trim();
     const confidence = Math.round(result.data.confidence || 0);
 
-    return NextResponse.json({
-      success: true,
-      text,
-      confidence,
-      engine: "tesseract-local-node",
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        text,
+        confidence,
+        engine: "tesseract-local-node",
+      },
+      { headers: NO_STORE_HEADERS }
+    );
   } catch (error: unknown) {
     console.error("Server OCR API error:", error);
     const msg =
       error instanceof Error ? error.message : "Failed to extract text from document";
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return NextResponse.json(
+      { error: msg },
+      { status: 500, headers: NO_STORE_HEADERS }
+    );
   }
 }

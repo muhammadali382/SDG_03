@@ -3,6 +3,8 @@
 This file is the authoritative reference for any AI agent implementing this project.
 Read this fully before writing a single line of code.
 
+> **Branch Evolution Note (`dev`):** The sections below capture the original hackathon MVP bootstrap spec. The **Design System (light theme only)**, **Git Branching Strategy (`dev` vs `main`)**, **RAG Architecture**, and **Clinical Safety / Emergency Escalation rules** remain strictly enforced. On `dev`, the stack has since been upgraded beyond the initial prototype constraints to include `@libsql/client` (local SQLite in dev + Turso libSQL in production), `scrypt` + signed `HttpOnly` cookie auth, API rate limiting, local server OCR (`tesseract.js`), Whisper transcription (`whisper-large-v3-turbo`), Guided 5-Question Doctor Report Intake, and automated unit tests (`npm test`). See `README.md` for the live architecture reference.
+
 ---
 
 ## Project Identity

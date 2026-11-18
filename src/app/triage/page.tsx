@@ -262,6 +262,7 @@ export default function TriagePage() {
       const res = await fetch("/api/report", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           userId: user?.id,
           intakeAnswers,
@@ -318,6 +319,7 @@ export default function TriagePage() {
       const res = await fetch("/api/report", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           userId: user?.id,
           messages,

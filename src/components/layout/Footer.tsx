@@ -167,10 +167,10 @@ export function Footer() {
             </div>
             <div className="space-y-3 text-xs text-slate-600 leading-relaxed">
               <p>
-                <strong>1. Local Storage Guarantee:</strong> TabeebCare stores your health profile credentials and triage histories inside your browser&apos;s local storage and a private on-device SQLite database. No external tracking cookies or advertising networks are used.
+                <strong>1. Secure Data Storage:</strong> TabeebCare protects account authentication with salted scrypt password hashing and signed HttpOnly session cookies, storing patient health profiles and consultation history in SQLite / Turso libSQL. No advertising trackers or third-party data brokers are used.
               </p>
               <p>
-                <strong>2. Groq AI Processing:</strong> Prescription queries and symptom messages sent to Groq AI inference are stripped of sensitive personal identifiers before transmission and processed transiently under HIPAA-aligned privacy practices.
+                <strong>2. AI Inference Processing:</strong> Prescription queries, voice audio, and symptom descriptions are sent to Groq Cloud API strictly to generate educational health guidance and are not sold or used for advertising.
               </p>
               <p>
                 <strong>3. Full Patient Control:</strong> You can reset or update your recorded chronic conditions and allergies at any time from your Health Profile settings.

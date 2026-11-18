@@ -23,6 +23,7 @@ dist/
 build/
 .next/
 out/
+.tmp-test-build/
 *.tsbuildinfo
 
 # System and IDE files

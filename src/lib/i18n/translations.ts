@@ -170,7 +170,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     hero_cta_dashboard: "Go to Dashboard",
     hero_cta_demo: "⚡ Instant Judge Demo",
     hero_cta_signup: "Create Free Account",
-    hero_trust_offline: "Local SQLite — Zero External DB Leakage",
+    hero_trust_offline: "Encrypted Sessions & Private Health Records",
     hero_trust_who: "Evidence-Based WHO Clinical Protocol Context",
     hero_trust_fast: "Ultra-Fast Groq Inference (<1s)",
     modules_title: "Core Health Literacy Modules",
@@ -238,7 +238,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     profile_allergies_title: "Known Drug & Substance Allergies",
     profile_meds_title: "Active Daily Medications",
     profile_add_btn: "Add",
-    profile_saved_toast: "Health profile updated and saved to SQLite!",
+    profile_saved_toast: "Health profile updated and saved securely!",
   },
 
   ur: {
@@ -291,7 +291,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     hero_cta_dashboard: "ڈیش بورڈ پر جائیں",
     hero_cta_demo: "⚡ فوری جج ڈیمو لاگ ان",
     hero_cta_signup: "مفت اکاؤنٹ بنائیں",
-    hero_trust_offline: "مقامی محفوظ SQLite — بیرونی ڈیٹا لیکج کے بغیر",
+    hero_trust_offline: "محفوظ انکرپٹڈ سیشنز اور نجی طبی ریکارڈ",
     hero_trust_who: "ڈبلیو ایچ او کلینیکل پروٹوکولز پر مبنی",
     hero_trust_fast: "ایک سیکنڈ سے کم تیز رفتار Groq AI",
     modules_title: "طبیب کیئر کے اہم ماڈیولز",
