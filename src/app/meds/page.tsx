@@ -6,7 +6,9 @@ import { useUser } from "@/context/UserContext";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { MedicineCard, MedicineData } from "@/components/meds/MedicineCard";
+import { PrescriptionImageUploader } from "@/components/meds/PrescriptionImageUploader";
 import { MedicalDisclaimerModal } from "@/components/layout/MedicalDisclaimer";
+import { VoiceButton } from "@/components/ui/VoiceButton";
 import {
   Pill,
   Sparkles,
@@ -179,8 +181,27 @@ export default function MedsPage() {
                 </div>
               </div>
 
-              {/* Textarea Input */}
+              {/* Printed Prescription Photo OCR Uploader */}
+              <PrescriptionImageUploader
+                isUrdu={isUrdu}
+                onExtractedText={(text) => {
+                  setInputMeds(text);
+                }}
+              />
+
+              {/* Textarea Input with Voice Dictation */}
               <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-semibold text-slate-600">
+                    {isUrdu ? "دواؤں کے نام لکھیں یا بولیں" : "Type or speak medicine names"}
+                  </span>
+                  <VoiceButton
+                    onTranscript={(spoken) => {
+                      setInputMeds((prev) => (prev ? `${prev}, ${spoken}` : spoken));
+                    }}
+                    defaultLang={isUrdu ? "ur-PK" : "en-US"}
+                  />
+                </div>
                 <textarea
                   rows={4}
                   value={inputMeds}
