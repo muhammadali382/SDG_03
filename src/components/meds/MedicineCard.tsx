@@ -1,8 +1,9 @@
 "use client";
 
 import React from "react";
-import { Pill, Sun, Sunrise, Sunset, Moon, AlertTriangle, ShieldCheck, Utensils, AlertCircle } from "lucide-react";
+import { Pill, Sun, Sunrise, Sunset, Moon, AlertTriangle, ShieldCheck, Utensils, AlertCircle, MapPin } from "lucide-react";
 import clsx from "clsx";
+import { AudioReadoutButton } from "../ui/AudioReadoutButton";
 
 export interface MedicineData {
   name: string;
@@ -36,6 +37,15 @@ export function MedicineCard({ med, lang = "en" }: MedicineCardProps) {
     { key: "evening", label: "Evening", labelUrdu: "شام", icon: Sunset, active: med.schedule?.evening },
     { key: "night", label: "Night", labelUrdu: "رات", icon: Moon, active: med.schedule?.night },
   ];
+
+  const activeTimes = scheduleSlots
+    .filter((s) => s.active)
+    .map((s) => (isUrdu ? s.labelUrdu : s.label))
+    .join(", ");
+
+  const readoutText = isUrdu
+    ? `${med.name}. ${med.purpose_urdu || med.purpose}. ${activeTimes ? `اوقات: ${activeTimes}.` : ""} ${med.food_instruction_urdu || med.food_instruction || ""} ${med.allergy_conflict && med.allergy_message ? `الرجی کا خطرہ: ${med.allergy_message}` : ""}`.trim()
+    : `${med.name}. ${med.purpose}. ${activeTimes ? `Schedule: ${activeTimes}.` : ""} ${med.food_instruction || ""} ${med.allergy_conflict && med.allergy_message ? `Allergy warning: ${med.allergy_message}` : ""}`.trim();
 
   return (
     <div
@@ -164,6 +174,20 @@ export function MedicineCard({ med, lang = "en" }: MedicineCardProps) {
             </ul>
           </div>
         )}
+      </div>
+
+      {/* Card Footer: Audio Readout & Nearest Pharmacy Link */}
+      <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
+        <AudioReadoutButton text={readoutText} />
+        <a
+          href="https://www.google.com/maps/search/pharmacy+near+me"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-teal-50 hover:border-teal-300 text-slate-700 hover:text-teal-800 text-xs font-semibold transition-colors"
+        >
+          <MapPin className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+          <span>{isUrdu ? "قریبی فارمیسی تلاش کریں" : "Find at Nearest Pharmacy"}</span>
+        </a>
       </div>
     </div>
   );

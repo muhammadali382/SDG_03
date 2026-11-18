@@ -6,7 +6,9 @@ import { useUser } from "@/context/UserContext";
 import { ChatBubble } from "@/components/triage/ChatBubble";
 import { EmergencyBanner } from "@/components/triage/EmergencyBanner";
 import { CrisisGuardrailBanner } from "@/components/triage/CrisisGuardrailBanner";
-import { SbarCard } from "@/components/triage/SbarCard";
+import { SbarCard, StructuredDoctorReport } from "@/components/triage/SbarCard";
+import { GuidedIntakeModal, IntakeAnswerItem } from "@/components/triage/GuidedIntakeModal";
+import { MedicalReportScanner } from "@/components/triage/MedicalReportScanner";
 import { ExplainabilityModal, RetrievalMeta } from "@/components/triage/ExplainabilityModal";
 import { VoiceButton } from "@/components/ui/VoiceButton";
 import { MedicalDisclaimerModal } from "@/components/layout/MedicalDisclaimer";
@@ -25,6 +27,9 @@ import {
   HeartHandshake,
   UserCheck,
   HelpCircle,
+  ClipboardList,
+  FileImage,
+  Loader2,
 } from "lucide-react";
 
 interface Message {
@@ -47,6 +52,15 @@ export default function TriagePage() {
   // Feature 2: Explainability metadata state
   const [retrievalMeta, setRetrievalMeta] = useState<RetrievalMeta | null>(null);
   const [isExplainOpen, setIsExplainOpen] = useState(false);
+
+  // Multi-Question Doctor Report & Lab Image Analyzer state
+  const [isGuidedOpen, setIsGuidedOpen] = useState(false);
+  const [isReportScannerOpen, setIsReportScannerOpen] = useState(false);
+  const [attachedLabSummary, setAttachedLabSummary] = useState<string | null>(null);
+  const [structuredReport, setStructuredReport] = useState<StructuredDoctorReport | null>(null);
+  const [reportAnsweredCount, setReportAnsweredCount] = useState<number>(0);
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+  const [reportNotice, setReportNotice] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -239,6 +253,102 @@ export default function TriagePage() {
     }
   };
 
+  const userMessageCount = messages.filter((m) => m.role === "user").length;
+
+  const handleGuidedReportSubmit = async (intakeAnswers: IntakeAnswerItem[]) => {
+    setIsGeneratingReport(true);
+    setReportNotice(null);
+    try {
+      const res = await fetch("/api/report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user?.id,
+          intakeAnswers,
+          labReportSummary: attachedLabSummary,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.report) {
+        throw new Error(data.error || "Failed to generate doctor report");
+      }
+
+      setStructuredReport(data.report);
+      setReportAnsweredCount(data.answeredCount || intakeAnswers.length);
+      if (data.report.triage_level) {
+        setCurrentTriageLevel(String(data.report.triage_level).toLowerCase());
+      }
+      setIsGuidedOpen(false);
+      setIsSbarOpen(true);
+    } catch (err) {
+      setReportNotice(
+        err instanceof Error
+          ? err.message
+          : isUrdu
+          ? "ڈاکٹر رپورٹ تیار کرنے میں مسئلہ آیا"
+          : "Could not generate doctor report"
+      );
+    } finally {
+      setIsGeneratingReport(false);
+    }
+  };
+
+  const handleChatReportClick = async () => {
+    setReportNotice(null);
+
+    // If a multi-question structured report was already generated, reopen it directly
+    if (structuredReport && userMessageCount < 3) {
+      setIsSbarOpen(true);
+      return;
+    }
+
+    // Enforce multi-question intake (>= 3 answered turns) — never on 1 question only
+    if (userMessageCount < 3) {
+      setReportNotice(
+        isUrdu
+          ? `مکمل ڈاکٹر رپورٹ کے لیے کم از کم 3 سوالات کے جوابات ضروری ہیں (ابھی ${userMessageCount}/3 مکمل)۔ آپ اوپر "ڈاکٹر رپورٹ (5 سوالات)" بھی استعمال کر سکتے ہیں۔`
+          : `Comprehensive doctor reports require at least 3 answered questions (${userMessageCount}/3 answered so far). Keep chatting or click "Guided Doctor Report (5 Qs)"!`
+      );
+      return;
+    }
+
+    setIsGeneratingReport(true);
+    try {
+      const res = await fetch("/api/report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user?.id,
+          messages,
+          labReportSummary: attachedLabSummary,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.report) {
+        throw new Error(data.error || "Failed to synthesize doctor report");
+      }
+
+      setStructuredReport(data.report);
+      setReportAnsweredCount(data.answeredCount || userMessageCount);
+      if (data.report.triage_level) {
+        setCurrentTriageLevel(String(data.report.triage_level).toLowerCase());
+      }
+      setIsSbarOpen(true);
+    } catch (err) {
+      setReportNotice(
+        err instanceof Error
+          ? err.message
+          : isUrdu
+          ? "ڈاکٹر رپورٹ تیار نہیں ہو سکی"
+          : "Failed to synthesize doctor report"
+      );
+    } finally {
+      setIsGeneratingReport(false);
+    }
+  };
+
   const handleReset = () => {
     setMessages([]);
     setCurrentTriageLevel(null);
@@ -246,6 +356,9 @@ export default function TriagePage() {
     setInputMessage("");
     setRetrievalMeta(null);
     setIsExplainOpen(false);
+    setStructuredReport(null);
+    setReportAnsweredCount(0);
+    setReportNotice(null);
   };
 
   if (isUserLoading || !user) {
@@ -286,7 +399,40 @@ export default function TriagePage() {
         </div>
 
         {/* Action Header Buttons */}
-        <div className="flex items-center gap-2 self-start sm:self-center">
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-center">
+          {/* Guided Multi-Question Doctor Report Intake */}
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => {
+              setReportNotice(null);
+              setIsGuidedOpen(true);
+            }}
+            className="gap-1.5 text-xs font-bold shadow-xs"
+          >
+            <ClipboardList className="w-3.5 h-3.5" />
+            <span>{isUrdu ? "ڈاکٹر رپورٹ (5 سوالات)" : "Guided Doctor Report (5 Qs)"}</span>
+          </Button>
+
+          {/* Upload & Analyze Lab Report Image (OCR) */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsReportScannerOpen(true)}
+            className="gap-1.5 text-xs font-semibold shadow-2xs border-teal-200 text-teal-800 bg-white hover:bg-teal-50"
+          >
+            <FileImage className="w-3.5 h-3.5 text-teal-600" />
+            <span>
+              {attachedLabSummary
+                ? isUrdu
+                  ? "لیب رپورٹ منسلک ✓"
+                  : "Lab Report ✓"
+                : isUrdu
+                ? "لیب رپورٹ اپ لوڈ (OCR)"
+                : "Upload Report Image"}
+            </span>
+          </Button>
+
           {retrievalMeta && (
             <Button
               variant="outline"
@@ -299,31 +445,69 @@ export default function TriagePage() {
             </Button>
           )}
 
-          {messages.length > 0 && (
+          {(messages.length > 0 || structuredReport) && (
             <>
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setIsSbarOpen(true)}
+                onClick={() => void handleChatReportClick()}
+                disabled={isGeneratingReport}
                 className="gap-1.5 text-xs font-semibold shadow-2xs"
               >
-                <FileText className="w-3.5 h-3.5 text-teal-600" />
-                <span>{isUrdu ? "ڈاکٹر کارڈ (SBAR)" : "SBAR Summary"}</span>
+                {isGeneratingReport ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-teal-600" />
+                ) : (
+                  <FileText className="w-3.5 h-3.5 text-teal-600" />
+                )}
+                <span>
+                  {structuredReport
+                    ? isUrdu
+                      ? "ڈاکٹر کارڈ دیکھیں (SBAR)"
+                      : "View Doctor Report"
+                    : userMessageCount >= 3
+                    ? isUrdu
+                      ? "ڈاکٹر رپورٹ بنائیں (SBAR)"
+                      : "Generate SBAR Report"
+                    : isUrdu
+                    ? `رپورٹ (${userMessageCount}/3 سوالات)`
+                    : `SBAR Report (${userMessageCount}/3 Qs)`}
+                </span>
               </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleReset}
-                className="gap-1 text-xs text-slate-500 hover:text-slate-800"
-                title={t("triage_btn_reset")}
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>{t("triage_btn_reset")}</span>
-              </Button>
+              {messages.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleReset}
+                  className="gap-1 text-xs text-slate-500 hover:text-slate-800"
+                  title={t("triage_btn_reset")}
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>{t("triage_btn_reset")}</span>
+                </Button>
+              )}
             </>
           )}
         </div>
       </div>
+
+      {/* Multi-Question Requirement Notice */}
+      {reportNotice && (
+        <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-300 text-xs sm:text-sm text-amber-950 flex flex-wrap items-center justify-between gap-3 shadow-2xs">
+          <span className="font-semibold">{reportNotice}</span>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => {
+              setReportNotice(null);
+              setIsGuidedOpen(true);
+            }}
+            className="text-xs gap-1.5"
+          >
+            <ClipboardList className="w-3.5 h-3.5" />
+            <span>{isUrdu ? "5 سوالات شروع کریں" : "Start 5-Question Intake"}</span>
+          </Button>
+        </div>
+      )}
 
       {/* Full-Width Workspace Layout: Left Sidebar + Right Live Chat */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
@@ -540,7 +724,7 @@ export default function TriagePage() {
         </div>
       </div>
 
-      {/* SBAR Card Modal */}
+      {/* SBAR Card Modal (Synthesized Multi-Question Report) */}
       <SbarCard
         isOpen={isSbarOpen}
         onClose={() => setIsSbarOpen(false)}
@@ -550,9 +734,29 @@ export default function TriagePage() {
         conditions={profile?.conditions}
         allergies={profile?.allergies}
         medications={profile?.current_medications}
-        situation={messages.find((m) => m.role === "user")?.content || "Acute patient symptom report"}
-        assessment={messages.filter((m) => m.role === "assistant").pop()?.content || "Triage evaluation"}
+        situation={messages.find((m) => m.role === "user")?.content || "Multi-question clinical intake"}
+        assessment={messages.filter((m) => m.role === "assistant").pop()?.content || "Clinical evaluation"}
         triageLevel={currentTriageLevel || "Clinical Evaluation"}
+        structuredReport={structuredReport}
+        answeredQuestionsCount={reportAnsweredCount || userMessageCount}
+      />
+
+      {/* Guided 5-Question Doctor Report Intake Modal */}
+      <GuidedIntakeModal
+        isOpen={isGuidedOpen}
+        onClose={() => setIsGuidedOpen(false)}
+        onSubmitAnswers={handleGuidedReportSubmit}
+        isGenerating={isGeneratingReport}
+        hasAttachedLabReport={!!attachedLabSummary}
+      />
+
+      {/* Real Image Upload & Lab Report OCR Analyzer Modal */}
+      <MedicalReportScanner
+        isOpen={isReportScannerOpen}
+        onClose={() => setIsReportScannerOpen(false)}
+        onAttachToReport={(summaryText) => {
+          setAttachedLabSummary(summaryText);
+        }}
       />
 
       {/* FEATURE 2: Explainability Modal */}

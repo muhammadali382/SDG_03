@@ -7,12 +7,32 @@ import {
   X,
   HeartPulse,
   Download,
-  Languages,
   Check,
   Copy,
+  HelpCircle,
+  FlaskConical,
+  ListChecks,
 } from "lucide-react";
 import { Button } from "../ui/Button";
 import { useUser } from "@/context/UserContext";
+
+export interface StructuredDoctorReport {
+  triage_level?: string;
+  chief_complaint_en?: string;
+  chief_complaint_ur?: string;
+  situation_en?: string;
+  situation_ur?: string;
+  timeline_en?: string[];
+  timeline_ur?: string[];
+  assessment_en?: string;
+  assessment_ur?: string;
+  lab_findings_summary_en?: string | null;
+  lab_findings_summary_ur?: string | null;
+  recommendations_en?: string;
+  recommendations_ur?: string;
+  questions_for_doctor_en?: string[];
+  questions_for_doctor_ur?: string[];
+}
 
 interface SbarCardProps {
   isOpen: boolean;
@@ -26,6 +46,8 @@ interface SbarCardProps {
   situation: string;
   assessment: string;
   triageLevel?: string;
+  structuredReport?: StructuredDoctorReport | null;
+  answeredQuestionsCount?: number;
 }
 
 export function SbarCard({
@@ -40,6 +62,8 @@ export function SbarCard({
   situation,
   assessment,
   triageLevel = "Clinical Evaluation",
+  structuredReport = null,
+  answeredQuestionsCount,
 }: SbarCardProps) {
   const { lang } = useUser();
   const [cardLang, setCardLang] = useState<"en" | "ur">(lang === "ur" ? "ur" : "en");
@@ -48,8 +72,8 @@ export function SbarCard({
   if (!isOpen) return null;
 
   const isUrdu = cardLang === "ur";
+  const effectiveLevel = structuredReport?.triage_level || triageLevel || "Clinical Evaluation";
 
-  // Translate triage level into Urdu
   const getUrduTriageLevel = (lvl: string) => {
     const lower = lvl.toLowerCase();
     if (lower.includes("emergency")) return "🚨 ہنگامی صورتحال (Emergency)";
@@ -59,11 +83,36 @@ export function SbarCard({
     return lvl;
   };
 
-  // Strip technical prompt tags from assessment
-  const cleanAssessment = assessment
+  const fallbackAssessment = assessment
     .replace(/^TRIAGE_LEVEL:\s*\w+\s*/i, "")
     .replace(/^---\s*/, "")
     .trim();
+
+  const displaySituation = isUrdu
+    ? structuredReport?.situation_ur || situation || "مریض نے متعدد سوالات کے دوران علامات رپورٹ کیں۔"
+    : structuredReport?.situation_en || situation || "Patient reported acute symptoms during multi-question intake.";
+
+  const displayTimeline = isUrdu
+    ? structuredReport?.timeline_ur || structuredReport?.timeline_en || []
+    : structuredReport?.timeline_en || [];
+
+  const displayLabFindings = isUrdu
+    ? structuredReport?.lab_findings_summary_ur || structuredReport?.lab_findings_summary_en || null
+    : structuredReport?.lab_findings_summary_en || null;
+
+  const displayAssessment = isUrdu
+    ? structuredReport?.assessment_ur || fallbackAssessment || "ڈبلیو ایچ او کلینیکل پروٹوکول کے تحت جائزہ تیار کیا گیا۔"
+    : structuredReport?.assessment_en || fallbackAssessment || "Clinical assessment generated through WHO-inspired triage protocols.";
+
+  const displayRecommendation = isUrdu
+    ? structuredReport?.recommendations_ur ||
+      "فزیکل معائنہ، اہم علامات کی تصدیق (بلڈ پریشر، نبض/دل کی دھڑکن، آکسیجن، بلڈ شوگر لیول) اور معالج ڈاکٹر کے فیصلے کے مطابق تشخیصی ورک اپ۔"
+    : structuredReport?.recommendations_en ||
+      "Physical examination, vital signs verification (BP, Heart Rate, SpO2, Blood Sugar), and clinical diagnostic workup as indicated by physician.";
+
+  const displayDoctorQuestions = isUrdu
+    ? structuredReport?.questions_for_doctor_ur || structuredReport?.questions_for_doctor_en || []
+    : structuredReport?.questions_for_doctor_en || [];
 
   const handlePrint = () => {
     window.print();
@@ -73,69 +122,87 @@ export function SbarCard({
     const dateStr = new Date().toLocaleDateString("en-GB");
     const timeStr = new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 
+    const timelineBlock =
+      displayTimeline.length > 0
+        ? `\n${isUrdu ? "[علامات کی تفصیل / ٹائم لائن]" : "[INTAKE TIMELINE]"}\n${displayTimeline
+            .map((t) => `- ${t}`)
+            .join("\n")}\n`
+        : "";
+
+    const labBlock = displayLabFindings
+      ? `\n${isUrdu ? "[منسلک لیب رپورٹ نتائج]" : "[ATTACHED LAB REPORT FINDINGS]"}\n${displayLabFindings}\n`
+      : "";
+
+    const questionsBlock =
+      displayDoctorQuestions.length > 0
+        ? `\n${isUrdu ? "[ڈاکٹر سے پوچھنے کے سوالات]" : "[QUESTIONS TO ASK YOUR DOCTOR]"}\n${displayDoctorQuestions
+            .map((q, i) => `${i + 1}. ${q}`)
+            .join("\n")}\n`
+        : "";
+
     const fileContent = isUrdu
       ? `============================================================
-طبیب کیئر — ڈاکٹر کلینیکل ہینڈ اوور کارڈ (SBAR خلاصہ)
+طبیب کیئر — جامع ڈاکٹر کلینیکل ہینڈ اوور رپورٹ (SBAR)
 تاریخ: ${dateStr} ${timeStr}
-طبی نظام: TabeebCare SDG 3 Primary Healthcare Assistant
+${answeredQuestionsCount ? `کل انٹیک سوالات: ${answeredQuestionsCount}` : ""}
 ============================================================
 
 [مریض کی تفصیلات]
 - نام: ${patientName}
 - عمر و جنس: ${patientAge ? `${patientAge} سال` : "معلوم نہیں"} • ${patientGender || "معلوم نہیں"}
-- ہنگامی ترجیح: ${getUrduTriageLevel(triageLevel)}
+- ہنگامی ترجیح: ${getUrduTriageLevel(effectiveLevel)}
 - معلوم الرجی: ${allergies.length > 0 ? allergies.join(", ") : "کوئی معلوم الرجی درج نہیں"}
 
 ------------------------------------------------------------
 [S] صورتحال (SITUATION):
-${situation || "مریض نے ابتدائی سوالنامے کے دوران علامات رپورٹ کیں۔"}
-
+${displaySituation}
+${timelineBlock}
 ------------------------------------------------------------
 [B] پس منظر (BACKGROUND):
 - دائمی امراض: ${conditions.length > 0 ? conditions.join(", ") : "کوئی نہیں"}
 - موجودہ ادویات: ${medications.length > 0 ? medications.join(", ") : "کوئی نہیں"}
-
+${labBlock}
 ------------------------------------------------------------
 [A] کلینیکل جائزہ (ASSESSMENT):
-${cleanAssessment || "ڈبلیو ایچ او کلینیکل ٹریآج پروٹوکول کے تحت تیار کردہ جائزہ۔"}
+${displayAssessment}
 
 ------------------------------------------------------------
 [R] ڈاکٹر کے لیے سفارشات (RECOMMENDATION):
-فزیکل معائنہ، اہم علامات کی تصدیق (بلڈ پریشر، دل کی دھڑکن، آکسیجن، شوگر لیول) اور معالج ڈاکٹر کی صوابدید کے مطابق تشخیصی ورک اپ۔
-
+${displayRecommendation}
+${questionsBlock}
 ============================================================
-نوٹ: یہ خلاصہ طبیب کیئر تعلیمی و ٹریآج سسٹم نے تیار کیا ہے۔
+نوٹ: یہ رپورٹ طبیب کیئر تعلیمی و ٹریآج سسٹم نے تیار کی ہے۔
 یہ حتمی طبی تشخیص کا نعم البدل نہیں ہے۔
 ============================================================`
       : `============================================================
-TABEEBCARE CLINICAL HANDOVER CARD (SBAR SUMMARY)
+TABEEBCARE COMPREHENSIVE DOCTOR HANDOVER REPORT (SBAR)
 Date: ${dateStr} ${timeStr}
-System: TabeebCare SDG 3 Primary Healthcare Assistant
+${answeredQuestionsCount ? `Synthesized From: ${answeredQuestionsCount} Clinical Intake Questions` : ""}
 ============================================================
 
 [PATIENT OVERVIEW]
 - Name: ${patientName}
 - Demographics: ${patientAge ? `${patientAge} yrs` : "N/A"} • ${patientGender || "N/A"}
-- Triage Urgency: ${triageLevel}
+- Triage Urgency: ${effectiveLevel.toUpperCase()}
 - Known Allergies: ${allergies.length > 0 ? allergies.join(", ") : "None reported"}
 
 ------------------------------------------------------------
 [S] SITUATION (Presenting Complaint):
-${situation || "Patient reported acute symptoms during conversational intake."}
-
+${displaySituation}
+${timelineBlock}
 ------------------------------------------------------------
-[B] BACKGROUND (Medical History & Current Medications):
+[B] BACKGROUND (Medical History & Medications):
 - Chronic Conditions: ${conditions.length > 0 ? conditions.join(", ") : "None recorded"}
 - Current Medications: ${medications.length > 0 ? medications.join(", ") : "None reported"}
+${labBlock}
+------------------------------------------------------------
+[A] ASSESSMENT (Clinical Observations):
+${displayAssessment}
 
 ------------------------------------------------------------
-[A] ASSESSMENT (Clinical Symptoms & Observations):
-${cleanAssessment || "Clinical assessment generated through WHO Triage protocols."}
-
-------------------------------------------------------------
-[R] RECOMMENDATION (Suggested Clinical Focus):
-Physical examination, vital signs verification (BP, Heart Rate, SpO2, Blood Sugar), and clinical diagnostic workup as indicated by physician.
-
+[R] RECOMMENDATION (Suggested Clinical Workup):
+${displayRecommendation}
+${questionsBlock}
 ============================================================
 DISCLAIMER: Prepared via TabeebCare for educational triage navigation.
 It does not replace professional medical diagnosis or treatment.
@@ -145,7 +212,7 @@ It does not replace professional medical diagnosis or treatment.
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `TabeebCare_SBAR_${patientName.replace(/\s+/g, "_")}_${dateStr.replace(/\//g, "-")}.txt`;
+    link.download = `TabeebCare_Doctor_Report_${patientName.replace(/\s+/g, "_")}_${dateStr.replace(/\//g, "-")}.txt`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -153,7 +220,7 @@ It does not replace professional medical diagnosis or treatment.
   };
 
   const handleCopy = async () => {
-    const textToCopy = `TabeebCare SBAR Report (${patientName}):\nSituation: ${situation}\nAssessment: ${cleanAssessment}`;
+    const textToCopy = `TabeebCare SBAR Doctor Report (${patientName} | ${effectiveLevel.toUpperCase()}):\nSituation: ${displaySituation}\nAssessment: ${displayAssessment}\nRecommendation: ${displayRecommendation}`;
     try {
       await navigator.clipboard.writeText(textToCopy);
       setCopied(true);
@@ -173,21 +240,29 @@ It does not replace professional medical diagnosis or treatment.
               <FileText className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-sm sm:text-base font-bold text-slate-800">
-                {isUrdu
-                  ? "ڈاکٹر کلینیکل کارڈ (SBAR رپورٹ)"
-                  : "Doctor Handover Card (SBAR Clinical Summary)"}
+              <h3 className="text-sm sm:text-base font-bold text-slate-800 flex flex-wrap items-center gap-2">
+                <span>
+                  {isUrdu
+                    ? "جامع ڈاکٹر کلینیکل رپورٹ (SBAR)"
+                    : "Comprehensive Doctor Report (SBAR Summary)"}
+                </span>
+                {answeredQuestionsCount && answeredQuestionsCount >= 3 && (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 border border-teal-200">
+                    {isUrdu
+                      ? `${answeredQuestionsCount} سوالات سے تیار کردہ`
+                      : `${answeredQuestionsCount}-Question Synthesis`}
+                  </span>
+                )}
               </h3>
               <p className="text-xs text-slate-500">
                 {isUrdu
-                  ? "ڈاکٹر کے معائنے کے لیے فوری کلینیکل خلاصہ"
-                  : "Standardized clinical intake summary for your consulting physician"}
+                  ? "ڈاکٹر کے معائنے کے لیے جامع کلینیکل خلاصہ"
+                  : "Multi-question clinical intake summary ready for your consulting physician"}
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            {/* Language Toggle */}
             <div className="inline-flex items-center bg-slate-200/80 p-0.5 rounded-lg border border-slate-300/70 text-xs font-semibold">
               <button
                 type="button"
@@ -226,7 +301,7 @@ It does not replace professional medical diagnosis or treatment.
         {/* Printable Card Body */}
         <div
           dir={isUrdu ? "rtl" : "ltr"}
-          className={`p-5 sm:p-7 overflow-y-auto space-y-6 text-sm text-slate-700 print:p-0 ${
+          className={`p-5 sm:p-7 overflow-y-auto space-y-5 text-sm text-slate-700 print:p-0 ${
             isUrdu ? "font-sans leading-relaxed" : ""
           }`}
         >
@@ -250,7 +325,7 @@ It does not replace professional medical diagnosis or treatment.
             <div className={`${isUrdu ? "text-left" : "text-right"} text-xs text-slate-500 font-mono`}>
               <p>{isUrdu ? "تاریخ" : "Date"}: {new Date().toLocaleDateString("en-GB")}</p>
               <p className="text-[11px] text-slate-400">
-                {isUrdu ? "پروٹوکول: ڈبلیو ایچ او گائیڈ لائنز" : "Protocol: WHO Guidelines RAG"}
+                {isUrdu ? "پروٹوکول: ڈبلیو ایچ او گائیڈ لائنز" : "Protocol: WHO-Inspired RAG"}
               </p>
             </div>
           </div>
@@ -276,7 +351,7 @@ It does not replace professional medical diagnosis or treatment.
                 {isUrdu ? "ہنگامی ترجیح" : "Triage Urgency"}
               </span>
               <span className="font-extrabold text-teal-700 text-xs block mt-0.5">
-                {isUrdu ? getUrduTriageLevel(triageLevel) : triageLevel.toUpperCase()}
+                {isUrdu ? getUrduTriageLevel(effectiveLevel) : effectiveLevel.toUpperCase()}
               </span>
             </div>
             <div>
@@ -296,7 +371,7 @@ It does not replace professional medical diagnosis or treatment.
           {/* SBAR Clinical Sections */}
           <div className="space-y-4">
             {/* Situation */}
-            <div className="p-3.5 rounded-xl border border-slate-200 bg-white space-y-1">
+            <div className="p-3.5 rounded-xl border border-slate-200 bg-white space-y-2">
               <h4 className="text-xs font-bold text-teal-800 uppercase tracking-wider flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-teal-600 shrink-0" />
                 {isUrdu
@@ -308,8 +383,27 @@ It does not replace professional medical diagnosis or treatment.
                   isUrdu ? "pr-3.5 border-r-2" : "pl-3.5 border-l-2"
                 } border-teal-200`}
               >
-                {situation || (isUrdu ? "مریض نے علامات رپورٹ کیں۔" : "Patient reported acute symptoms during intake.")}
+                {displaySituation}
               </p>
+
+              {/* Multi-question timeline bullets */}
+              {displayTimeline.length > 0 && (
+                <div
+                  className={`pt-2 ${
+                    isUrdu ? "pr-3.5 border-r-2" : "pl-3.5 border-l-2"
+                  } border-teal-100 space-y-1`}
+                >
+                  <span className="text-[11px] font-bold text-slate-500 flex items-center gap-1">
+                    <ListChecks className="w-3.5 h-3.5 text-teal-600" />
+                    {isUrdu ? "انٹیک سوالات کا خلاصہ:" : "Key Intake Findings:"}
+                  </span>
+                  <ul className="list-disc list-inside text-xs text-slate-700 space-y-0.5">
+                    {displayTimeline.map((item, idx) => (
+                      <li key={idx}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
 
             {/* Background */}
@@ -352,6 +446,23 @@ It does not replace professional medical diagnosis or treatment.
               </div>
             </div>
 
+            {/* Optional Attached Lab Report Findings */}
+            {displayLabFindings && (
+              <div className="p-3.5 rounded-xl border border-sky-200 bg-sky-50/50 space-y-1.5">
+                <h4 className="text-xs font-bold text-sky-900 uppercase tracking-wider flex items-center gap-1.5">
+                  <FlaskConical className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                  {isUrdu ? "منسلک لیب رپورٹ نتائج (OCR تجزیہ)" : "Attached Lab Report Findings (OCR)"}
+                </h4>
+                <p
+                  className={`text-xs sm:text-sm text-sky-950 leading-relaxed ${
+                    isUrdu ? "pr-3.5 border-r-2 border-sky-300" : "pl-3.5 border-l-2 border-sky-300"
+                  }`}
+                >
+                  {displayLabFindings}
+                </p>
+              </div>
+            )}
+
             {/* Assessment */}
             <div className="p-3.5 rounded-xl border border-slate-200 bg-white space-y-1">
               <h4 className="text-xs font-bold text-teal-800 uppercase tracking-wider flex items-center gap-1.5">
@@ -365,10 +476,7 @@ It does not replace professional medical diagnosis or treatment.
                   isUrdu ? "pr-3.5 border-r-2" : "pl-3.5 border-l-2"
                 } border-teal-200 whitespace-pre-wrap max-h-48 overflow-y-auto`}
               >
-                {cleanAssessment ||
-                  (isUrdu
-                    ? "کلینیکل پروٹوکول کے تحت تجزیہ تیار کیا گیا۔"
-                    : "Clinical assessment generated through WHO Triage protocols.")}
+                {displayAssessment}
               </div>
             </div>
 
@@ -385,11 +493,26 @@ It does not replace professional medical diagnosis or treatment.
                   isUrdu ? "pr-3.5 border-r-2 border-teal-400" : "pl-3.5 border-l-2 border-teal-400"
                 }`}
               >
-                {isUrdu
-                  ? "فزیکل معائنہ، اہم علامات کی تصدیق (بلڈ پریشر، نبض/دل کی دھڑکن، آکسیجن، بلڈ شوگر لیول) اور معالج ڈاکٹر کے فیصلے کے مطابق تشخیصی ورک اپ۔"
-                  : "Physical examination, vital signs verification (BP, Heart Rate, SpO2, Blood Sugar), and clinical diagnostic workup as indicated by physician."}
+                {displayRecommendation}
               </p>
             </div>
+
+            {/* Questions to Ask Doctor */}
+            {displayDoctorQuestions.length > 0 && (
+              <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/70 space-y-1.5">
+                <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                  <HelpCircle className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                  {isUrdu
+                    ? "ڈاکٹر سے پوچھنے کے لیے اہم سوالات"
+                    : "Questions to Ask Your Doctor (3-Min Visit Prep)"}
+                </h4>
+                <ol className="list-decimal list-inside text-xs text-slate-700 space-y-1">
+                  {displayDoctorQuestions.map((q, idx) => (
+                    <li key={idx}>{q}</li>
+                  ))}
+                </ol>
+              </div>
+            )}
           </div>
 
           {/* Footer Note */}
